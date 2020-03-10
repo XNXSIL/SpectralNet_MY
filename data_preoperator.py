@@ -45,3 +45,8 @@ def get_WMatrix(data):
 #计算拉普拉斯矩阵
 def get_LMatrix(data):
     pass
+
+#通过相似度矩阵C计算M矩阵
+def get_MMatirx(C, parm):
+    D = torch.diag(C)
+    return D - C + parm * D
