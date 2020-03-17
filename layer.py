@@ -42,11 +42,15 @@ class FCLayer(nn.Module):
         self.fc.append(nn.Linear(inSize, outSize))
 
     def forward(self, x):
-
-        out = x
-        for k in range(self.layerSize):
-            out = self.fc[k](out)
-        return out 
+        # out = self.fc[0](x)
+        
+        C = self.fc[0].weight
+        diag = torch.triu(C) - torch.triu(C, diagonal=1)
+        C = C - diag
+        # print(C)
+        out = C.mm(x)
+        return C,out
+    
 
 # class TrainLayer(nn.Module):
 #     def __init__(self):
@@ -77,7 +81,7 @@ def orthonorm_op(x, epsilon=1e-7):
                 right multiplication
     '''
     x_2 = torch.mm(torch.transpose(x, 1, 0), x)
-    x_2 = torch.eye(x.size()[1])*epsilon
+    x_2 += torch.eye(x.size()[1])*epsilon
     
     L = torch.cholesky(x_2)
 
@@ -90,16 +94,16 @@ def orthonorm(x):
 
 #深度谱聚类层
 class SpectralNetLayer(torch.nn.Module):
-    def __init__(self,batch_size,Y0,L0,Z0,alpha,beta,layers,labSize):
+    def __init__(self,batch_size,L0,alpha,beta,layers,labSize):
         super(SpectralNetLayer, self).__init__()
 
         #相似度矩阵size
         self.batch_size = batch_size
 
         #初始化参数
-        self.Y0 = Y0
+        self.Y0 = 0
         self.L0 = L0
-        self.Z0 = Z0
+        self.Z0 = 0
 
         #初始化权重
         # self.W = W
@@ -114,8 +118,10 @@ class SpectralNetLayer(torch.nn.Module):
 
         #全连接层
         self.fc = torch.nn.ModuleList()
+        self.fc2 = torch.nn.ModuleList()
         for i in range(layers):
-            self.fc.append(torch.nn.Linear(self.batch_size, self.batch_size, bias = False))
+            self.fc.append(torch.nn.Linear(self.labSize, self.labSize, bias = False))
+            self.fc2.append(torch.nn.Linear(self.labSize, self.labSize, bias = False))
 
         # #权重初始化
         # for m in self.modules():
@@ -129,6 +135,10 @@ class SpectralNetLayer(torch.nn.Module):
     def self_active(self, x):
         return torch.nn.functional.softmax(x)
     
+    def changeYZ0(self, Y0):
+        self.Y0 = Y0
+        self.Z0 = Y0
+
     def forward(self, M):
 
         Y = list()
@@ -140,18 +150,18 @@ class SpectralNetLayer(torch.nn.Module):
             if k == 0 : 
                 Y.append(self.self_active(self.Y0 - self.fc[k](M.mm(self.Y0) + self.L0 + self.beta*(self.Y0 - self.Z0))))
                 Var.append(self.L0 + self.alpha*self.beta*(Y[k] - self.Z0))
-                # Z.append(orthonorm(self.Z0 - self.fc[k](M.mm(self.Z0) -  Var[k] - self.beta*(Y[k] - self.Z0))))
-                Z.append(self.Z0 - self.fc[k](M.mm(self.Z0) -  Var[k] - self.beta*(Y[k] - self.Z0)))
+                Z.append(orthonorm(self.Z0 - self.fc2[k](M.mm(self.Z0) -  Var[k] - self.beta*(Y[k] - self.Z0))))
+                # Z.append(self.Z0 - self.fc2[k](M.mm(self.Z0) -  Var[k] - self.beta*(Y[k] - self.Z0)))
                 L.append(Var[k] + self.alpha*self.beta*(Y[k] - Z[k]))
 
                 
                 
             else :
-                Y.append(self.self_active(self.Y[k-1] - self.fc[k](M.mm(self.Y[k-1]) + self.L[k-1] + self.beta*(self.Y[k-1] - self.Z[k-1]))))
-                Var.append(self.L[k-1] + self.alpha*self.beta*(Y[k] - self.Z[k-1]))
-                # Z.append(orthonorm(self.Z[k-1] - self.fc[k](M.mm(self.Z[k-1]) -  Var[k] - self.beta*(Y[k] - self.Z[k-1]))))
-                Z.append(self.Z[k-1] - self.fc[k](M.mm(self.Z[k-1]) -  Var[k] - self.beta*(Y[k] - self.Z[k-1])))
+                Y.append(self.self_active(Y[k-1] - self.fc[k](M.mm(Y[k-1]) + L[k-1] + self.beta*(Y[k-1] - Z[k-1]))))
+                Var.append(L[k-1] + self.alpha*self.beta*(Y[k] - Z[k-1]))
+                Z.append(orthonorm(Z[k-1] - self.fc[k](M.mm(Z[k-1]) -  Var[k] - self.beta*(Y[k] - Z[k-1]))))
+                # Z.append(Z[k-1] - self.fc2[k](M.mm(Z[k-1]) -  Var[k] - self.beta*(Y[k] - Z[k-1])))
                 L.append(Var[k] + self.alpha*self.beta*(Y[k] - Z[k]))
 
-        return Y
+        return Y,Z
 
