@@ -62,7 +62,12 @@ def get_MMatirx(C, parm, D=None):
 def kmeans(k,x):
     clf = KMeans(n_clusters=k)
     s = clf.fit(x)
-    return clf.cluster_centers_,clf.Labels_
+    return clf.cluster_centers_,clf.labels_
+
+#归一化
+def normalization(data):
+    _range = numpy.max(data) - numpy.min(data)
+    return (data - numpy.min(data)) / _range
 
 #初始化Y0矩阵
 def get_Y0Matrix(method, k, isDiscrete, data):
@@ -70,11 +75,15 @@ def get_Y0Matrix(method, k, isDiscrete, data):
         input = data.numpy()
     if type(data) == torch.autograd.Variable:
         input = data.data.numpy()
-
+    else:
+        input = data
+    
     if method == "kmeans":
         cluster_center,labels = kmeans(k, input)
+
+
     n = input.shape[0]
-    result = numpy.zeros(n,k)
+    result = numpy.zeros(shape=(n,k), dtype=numpy.float)
     if isDiscrete:
         for i in range(n):
             for j in range(k):
@@ -83,8 +92,11 @@ def get_Y0Matrix(method, k, isDiscrete, data):
         for i in range(n):
             result[i][labels[i]-1] = 1
 
+
     #归一化
-    return torch.from_numpy(result)
+    result = normalization(result)
+    
+    return torch.FloatTensor(result)
 
 #读取csv文件
 def readCSV(filename, header):
@@ -108,7 +120,7 @@ def readMat(filename):
     init_Y = features_struct['init_Y']
     labels = features_struct['y0']
 
-    return A,D,C,init_Y,labels
+    return features,A,D,C,init_Y,labels
 
 #评判相似度矩阵C
 def calCLoss(C):

@@ -16,7 +16,7 @@ learning_rate = 0.001
 weight_decay = 1e-5
 alpha = 0.1
 beta = 0.01
-layers = 10
+layers = 7
 labSize = 10
 
 def TrainAutoEncoderLayer():
@@ -98,7 +98,7 @@ def TrainCSVData(Autoencoder, batch_size, labSize, Y0, M, labels):
     module = list()
     optimizer = list()
 
-    for layer in range(6,layers):
+    for layer in range(layers):
         module.append(SpectralNetLayer(batch_size,L0,alpha,beta,layer+1,labSize))
         module[layer].changeYZ0(Y0)
         optimizer.append(torch.optim.Adam(module[layer].parameters(), lr=learning_rate, weight_decay=weight_decay))
@@ -127,6 +127,7 @@ def TrainCSVData(Autoencoder, batch_size, labSize, Y0, M, labels):
             if i % 100 == 0:
                 print("layer %d epoch [%d/%d] loss %.4f" % (layer, i, num_epochs,lastLoss.item()))
         y[layer] = lastLoss
+        
         saveCSV("./tempData/Yk_"+str(layer+1)+".csv",numpy.array(outputs.numpy()))
 
     plt.title("layer_loss")
@@ -200,15 +201,32 @@ if __name__ == "__main__":
     # TrainCSVData(AutoEncoderLayer)
     # TrainNumberData(AutoEncoderLayer)
 
-    A,D,C,init_Y,labels = readMat("./data/data/Isolet_7797.mat")
+    #***************文本数据训练***************************
+    features,A,D,C,init_Y,labels = readMat("./data/data/Isolet_7797.mat")
+    print(type(features))
+    # print(C[0][0])
+
     eta = 0.01
     M = get_MMatirx(C=torch.FloatTensor(A), parm=eta, D=torch.FloatTensor(D))
-    Y0 = torch.FloatTensor(init_Y)
-    lables = torch.FloatTensor(labels)
-    # TrainCSVData(AutoEncoderLayer, init_Y.shape[0], init_Y.shape[1], Y0, M, labels)
 
-    _,_,data = readCSV("./tempData/Yk_5.csv",None)
-    print(calAccRate(labels,data))
+    #离散初始化Y0
+    # Y0 = torch.FloatTensor(init_Y)
+
+
+    #连续初始化Y0
+    Y0 = get_Y0Matrix("kmeans", C[0][0], True, features)
+
+
+    lables = torch.FloatTensor(labels)
+    TrainCSVData(AutoEncoderLayer, init_Y.shape[0], init_Y.shape[1], Y0, M, labels)
+
+
+
+    #*****************************画图*****************
+
+    # x = numpy.arange(1,6)
+    # y = numpy.array([0.03091,0.02988,0.03001,0.05592,0.03912])
+    # graph(x,y,"layer","ACC","ACC_layer")
 
 
 
